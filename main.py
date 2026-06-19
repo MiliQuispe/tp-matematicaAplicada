@@ -15,7 +15,7 @@ Ejemplos:
   python main.py list --file vault.bin --private private.pem --passphrase "miPass"
 """
 
-import argparse  # para manejar la linea de comandos
+""" import argparse  # para manejar la linea de comandos
 import base64  # para convertir binario a texto y viceversa
 import json  # para guardar registros como JSON
 import os  # para verificar existencia de archivos
@@ -134,3 +134,15 @@ def gestionar():
 
 if __name__ == "__main__":
     gestionar()
+ """
+
+#!/usr/bin/env python3
+"""
+Punto de entrada oficial para el Administrador de Contraseñas.
+UNLaM - Grupo de 7 Integrantes
+"""
+from gui import arrancar_interfaz
+
+if __name__ == "__main__":
+    # Arranca el bucle visual de las ventanas
+    arrancar_interfaz()
