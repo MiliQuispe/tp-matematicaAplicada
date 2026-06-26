@@ -248,9 +248,38 @@ class AdminContrasenasGUI:
         entry_name = tk.Entry(win, width=30)
         entry_name.pack(pady=5)
 
+      
+        # sv_password escucha los cambios del input
+        sv_password = tk.StringVar()
         tk.Label(win, text="Contraseña:").pack(pady=5)
-        entry_key = tk.Entry(win, width=30)
+        entry_key = tk.Entry(win, width=30, textvariable=sv_password)
         entry_key.pack(pady=5)
+        #Label para indicar el nivel de fortaleza de la contraseña
+        lbl_fortaleza = tk.Label(win, text="Fortaleza: Vacía", fg="grey", font=("Arial", 10, "italic"))
+        lbl_fortaleza.pack(pady=2)
+        #Funcion para actualizar el label de furza
+        def verificar_fortaleza(*args):
+            pwd = sv_password.get()
+            if not pwd:
+                lbl_fortaleza.config(text="Fortaleza: -", fg="grey")
+                return
+            
+            #usa password_strength de utils.py
+            res = utils.password_strength(pwd)
+            score = res["score"]
+            
+            
+            if score == 0:
+                lbl_fortaleza.config(text="Fortaleza: Muy Débil", fg="#cc0000")
+            elif score == 1:
+                lbl_fortaleza.config(text="Fortaleza: Débil", fg="#ff6600")
+            elif score == 2:
+                lbl_fortaleza.config(text="Fortaleza: Regular", fg="#b3b300")
+            elif score == 3:
+                lbl_fortaleza.config(text="Fortaleza: Buena", fg="#228b22")
+            elif score == 4:
+                lbl_fortaleza.config(text="Fortaleza: Excelente", fg="#0000ff")
+        sv_password.trace_add("write", verificar_fortaleza)
 
         def auto_generar():
             clave_segura = utils.generate_password(length=14)
