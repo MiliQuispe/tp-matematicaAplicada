@@ -233,6 +233,12 @@ class AdminContrasenasGUI:
         if not self.ruta_baul.get() or not self.ruta_privada.get():
             messagebox.showerror("Error", "Configura los archivos del panel izquierdo.")
             return
+        
+        master = self.entry_master.get()
+        if not master:
+            messagebox.showwarning("Aviso", "Debe ingresar la Contraseña Maestra en la barra superior antes de agregar una credencial.")
+            return
+        
         win = tk.Toplevel(self.root)
         win.title("Nuevo Registro")
         win.geometry("400x280")
