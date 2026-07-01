@@ -5,14 +5,14 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from typing import Dict, Any
+from typing import Dict
 
 # Utilidades de cifrado
 
 
 def generate_rsa_keypair(
     private_out: str, public_out: str, passphrase: bytes = None, bits: int = 2048
-):
+) -> None:
     """
     Genera un par de claves RSA:
     - private_out: archivo donde se guarda la clave privada
@@ -35,24 +35,25 @@ def generate_rsa_keypair(
         f.write(priv_pem)
     with open(public_out, "wb") as f:
         f.write(pub_pem)
-    print(f"Claves generadas: privada -> {private_out}, pública -> {public_out}")
 
 
 def load_public_key(pem_path: str):
-    # Carga la clave pública desde un archivo PEM
+    """Carga la clave pública desde un archivo PEM."""
     with open(pem_path, "rb") as f:
         return serialization.load_pem_public_key(f.read())
 
 
 def load_private_key(pem_path: str, passphrase: bytes = None):
-    # Carga la clave privada desde un archivo PEM, con passphrase si se cifró
+    """Carga la clave privada desde un archivo PEM, con passphrase si se cifró."""
     with open(pem_path, "rb") as f:
         return serialization.load_pem_private_key(f.read(), password=passphrase)
 
 
 def encrypt_records_to_file(
     records: Dict[str, str], public_key_path: str, out_file: str
-):
+) -> None:
+    """Cifra `records` con AES-256-GCM y protege esa clave AES con RSA-OAEP,
+    guardando todo el contenedor como JSON en `out_file`."""
     public_key = load_public_key(public_key_path)
     plaintext = json.dumps(records, ensure_ascii=False).encode("utf-8")
     # Genera una clave AES-256 aleatoria
@@ -81,19 +82,33 @@ def encrypt_records_to_file(
     # Guardamos el contenedor en el archivo
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(container, f)
-    print(f"Archivo cifrado guardado en {out_file}")
 
 
 def decrypt_records_from_file(
     file_path: str, private_key_path: str, passphrase: bytes = None
 ) -> Dict[str, str]:
-    # Descifra un archivo vault.
-    # Primero se descifra la clave AES con RSA-OAEP y luego se usan esos datos para descifrar los registros con AES-GCM.
+    """Descifra un archivo vault.
+
+    Primero se descifra la clave AES con RSA-OAEP y luego se usan esos
+    datos para descifrar los registros con AES-GCM.
+
+    Lanza ValueError si el archivo no tiene el formato esperado (corrupto
+    o no es un vault válido), o las excepciones propias de `cryptography`
+    si la passphrase/clave privada es incorrecta.
+    """
     with open(file_path, "r", encoding="utf-8") as f:
-        container = json.load(f)
-    encrypted_key = base64.b64decode(container["encrypted_key"])
-    nonce = base64.b64decode(container["nonce"])
-    ciphertext = base64.b64decode(container["ciphertext"])
+        try:
+            container = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"El archivo '{file_path}' no es un vault válido.") from e
+
+    try:
+        encrypted_key = base64.b64decode(container["encrypted_key"])
+        nonce = base64.b64decode(container["nonce"])
+        ciphertext = base64.b64decode(container["ciphertext"])
+    except (KeyError, ValueError) as e:
+        raise ValueError(f"El archivo '{file_path}' está corrupto o incompleto.") from e
+
     private_key = load_private_key(private_key_path, passphrase)
 
     # Descifra la clave AES

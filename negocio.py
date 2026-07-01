@@ -1,6 +1,5 @@
 import os
-import json
-from typing import Dict, Any
+from typing import Dict
 
 # IMPORTAMOS las funciones desde cripto.py
 from cripto import (
@@ -11,7 +10,14 @@ from cripto import (
 )
 
 # Funcionalidades de vault
-def init_empty_vault(out_file: str, public_key_path: str):
+#
+# IMPORTANTE: estas funciones son llamadas desde gui.py dentro de bloques
+# try/except que esperan capturar errores reales. Por eso, ante cualquier
+# problema, SIEMPRE se relanza una excepción (nunca se hace print + return),
+# o la GUI mostraría "Éxito" aunque la operación haya fallado.
+
+
+def init_empty_vault(out_file: str, public_key_path: str) -> None:
     encrypt_records_to_file({}, public_key_path, out_file)
 
 
@@ -22,18 +28,22 @@ def add_record(
     name: str,
     password: str,
     passphrase: bytes = None,
-):
+) -> None:
     if not os.path.exists(file_path):
-        print("Archivo no existe. Crea uno primero con init.")
-        return
-    try:
-        records = decrypt_records_from_file(file_path, private_key_path, passphrase)
-    except Exception as e:
-        print("Error al descifrar archivo:", e)
-        return
+        raise FileNotFoundError(
+            f"El archivo '{file_path}' no existe. Inicializa el baúl primero."
+        )
+
+    records = decrypt_records_from_file(file_path, private_key_path, passphrase)
+
+    if name in records:
+        raise ValueError(
+            f"Ya existe un registro llamado '{name}'. "
+            "Usa 'Modificar' si querés actualizar su contraseña."
+        )
+
     records[name] = password
     encrypt_records_to_file(records, public_key_path, file_path)
-    print(f"Registro agregado: {name}")
 
 
 def modify_record(
@@ -43,19 +53,14 @@ def modify_record(
     public_key_path: str,
     name: str,
     new_password: str,
-):
-    try:
-        records = decrypt_records_from_file(file_path, private_key_path, passphrase)
-    except Exception as e:
-        print("Error al descifrar para modificar:", e)
-        return
-        
+) -> None:
+    records = decrypt_records_from_file(file_path, private_key_path, passphrase)
+
     if name not in records:
-        print("No existe el registro:", name)
-        return
+        raise KeyError(f"No existe el registro '{name}'.")
+
     records[name] = new_password
     encrypt_records_to_file(records, public_key_path, file_path)
-    print("Registro modificado.")
 
 
 def delete_record(
@@ -64,30 +69,20 @@ def delete_record(
     passphrase: bytes,
     public_key_path: str,
     name: str,
-):
-    try:
-        records = decrypt_records_from_file(file_path, private_key_path, passphrase)
-    except Exception as e:
-        print("Error al descifrar para eliminar:", e)
-        return
-        
+) -> None:
+    records = decrypt_records_from_file(file_path, private_key_path, passphrase)
+
     if name not in records:
-        print("No existe el registro:", name)
-        return
+        raise KeyError(f"No existe el registro '{name}'.")
+
     del records[name]
     encrypt_records_to_file(records, public_key_path, file_path)
-    print("Registro eliminado.")
 
 
-def list_records(file_path: str, private_key_path: str, passphrase: bytes = None):
-    try:
-        records = decrypt_records_from_file(file_path, private_key_path, passphrase)
-    except Exception as e:
-        print("Error al descifrar para listar:", e)
-        return
-        
-    if not records:
-        print("(vacío)")
-        return
-    for k, v in records.items():
-        print(f"{k} - {v}")
+def list_records(file_path: str, private_key_path: str, passphrase: bytes = None) -> Dict[str, str]:
+    """Devuelve el diccionario completo de registros descifrados.
+
+    Se usa desde la CLI (main.py). La GUI llama directamente a
+    cripto.decrypt_records_from_file en lugar de esta función.
+    """
+    return decrypt_records_from_file(file_path, private_key_path, passphrase)
