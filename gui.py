@@ -112,36 +112,54 @@ def crear_check(parent, text, variable):
     )
 
 
+# Puntaje (0-4) -> (texto, color). Usado por el indicador de fortaleza.
+NIVELES_FORTALEZA = {
+    0: ("Muy Débil", COLOR_DANGER),
+    1: ("Débil", "#F1834D"),
+    2: ("Regular", COLOR_WARNING),
+    3: ("Buena", COLOR_ACCENT_DARK),
+    4: ("Excelente", COLOR_ACCENT),
+}
+
+
 def crear_indicador_fortaleza(parent, sv_password):
-    """Label que se actualiza solo, mostrando la fortaleza de la
+    """Barra visual de 4 segmentos + texto que reflejan la fortaleza de la
     contraseña vinculada a `sv_password` (usa utils.password_strength)."""
+    cont = tk.Frame(parent, bg=COLOR_BG)
+
+    barra = tk.Frame(cont, bg=COLOR_BG)
+    barra.pack(anchor="w")
+    segmentos = []
+    for _ in range(4):
+        seg = tk.Frame(barra, width=46, height=6, bg=COLOR_BORDER)
+        seg.pack(side=tk.LEFT, padx=(0, 4))
+        seg.pack_propagate(False)
+        segmentos.append(seg)
+
     lbl_fortaleza = tk.Label(
-        parent, text="Fortaleza: -", fg=COLOR_TEXT_DIM, bg=COLOR_BG,
+        cont, text="Fortaleza: -", fg=COLOR_TEXT_DIM, bg=COLOR_BG,
         font=("Segoe UI", 9, "italic"),
     )
+    lbl_fortaleza.pack(anchor="w", pady=(4, 0))
 
     def verificar_fortaleza(*args):
         pwd = sv_password.get()
         if not pwd:
+            for seg in segmentos:
+                seg.config(bg=COLOR_BORDER)
             lbl_fortaleza.config(text="Fortaleza: -", fg=COLOR_TEXT_DIM)
             return
 
-        res = utils.password_strength(pwd)
-        score = res["score"]
-
-        if score == 0:
-            lbl_fortaleza.config(text="Fortaleza: Muy Débil", fg=COLOR_DANGER)
-        elif score == 1:
-            lbl_fortaleza.config(text="Fortaleza: Débil", fg="#F1834D")
-        elif score == 2:
-            lbl_fortaleza.config(text="Fortaleza: Regular", fg=COLOR_WARNING)
-        elif score == 3:
-            lbl_fortaleza.config(text="Fortaleza: Buena", fg=COLOR_ACCENT_DARK)
-        elif score == 4:
-            lbl_fortaleza.config(text="Fortaleza: Excelente", fg=COLOR_ACCENT)
+        score = utils.password_strength(pwd)["score"]
+        texto, color = NIVELES_FORTALEZA.get(score, ("-", COLOR_TEXT_DIM))
+        # Pintamos tantos segmentos como el puntaje (al menos 1 si hay texto).
+        activos = max(score, 1)
+        for i, seg in enumerate(segmentos):
+            seg.config(bg=color if i < activos else COLOR_BORDER)
+        lbl_fortaleza.config(text=f"Fortaleza: {texto}", fg=color)
 
     sv_password.trace_add("write", verificar_fortaleza)
-    return lbl_fortaleza
+    return cont
 
 
 def crear_tarjeta(parent, titulo):
@@ -523,6 +541,13 @@ class AdminContrasenasGUI:
         # Doble clic en una fila para ver/copiar su contraseña
         self.tabla.bind("<Double-1>", lambda e: self.ventana_ver())
 
+        # Mensaje que se muestra sobre la tabla cuando el baúl está vacío.
+        self.lbl_vacio = tk.Label(
+            panel_tabla,
+            text='Todavía no hay credenciales.\nUsá "Agregar credencial" para guardar la primera.',
+            font=FONT_BODY, fg=COLOR_TEXT_MUTED, bg=COLOR_CARD, justify="center",
+        )
+
         # Barra inferior: Ver, Modificar y Eliminar
         barra_inferior = tk.Frame(self.vista_baul, bg=COLOR_BG)
         barra_inferior.pack(fill=tk.X, padx=16, pady=16)
@@ -566,6 +591,7 @@ class AdminContrasenasGUI:
 
         for item in self.tabla.get_children():
             self.tabla.delete(item)
+        self.lbl_vacio.place_forget()
 
         try:
             from cripto import decrypt_records_from_file
@@ -577,6 +603,7 @@ class AdminContrasenasGUI:
             )
             self.registros_actuales = records or {}
             if not records:
+                self.lbl_vacio.place(relx=0.5, rely=0.5, anchor="center")
                 return True
             for servicio in records:
                 self.tabla.insert("", tk.END, values=(servicio, "••••••••"))
@@ -637,9 +664,9 @@ class AdminContrasenasGUI:
 
         cats = tk.Frame(win, bg=COLOR_BG)
         cats.pack(anchor="w", padx=40, pady=(0, 10))
-        crear_check(cats, "A-Z", usar_may).pack(side=tk.LEFT)
-        crear_check(cats, "a-z", usar_min).pack(side=tk.LEFT)
-        crear_check(cats, "0-9", usar_dig).pack(side=tk.LEFT)
+        crear_check(cats, "A-Z", usar_may).pack(side=tk.LEFT, padx=(0, 14))
+        crear_check(cats, "a-z", usar_min).pack(side=tk.LEFT, padx=(0, 14))
+        crear_check(cats, "0-9", usar_dig).pack(side=tk.LEFT, padx=(0, 14))
         crear_check(cats, "!@#", usar_esp).pack(side=tk.LEFT)
 
         def auto_generar():
