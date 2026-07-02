@@ -424,6 +424,21 @@ class AdminContrasenasGUI:
                 entry_pass.focus_set()
                 return
 
+            # La inicialización es un evento único ("Día Cero"): si ya existen
+            # archivos de un baúl anterior, avisamos antes de sobrescribirlos
+            # para no borrar las contraseñas guardadas sin que el usuario lo sepa.
+            existentes = [
+                f for f in ("private.pem", "public.pem", "vault.bin") if os.path.exists(f)
+            ]
+            if existentes and not messagebox.askyesno(
+                "Ya existe un baúl",
+                "Se detectaron archivos de un baúl anterior:\n"
+                f"  {', '.join(existentes)}\n\n"
+                "Si continuás se SOBRESCRIBIRÁN y perderás el acceso a las "
+                "contraseñas ya guardadas.\n\n¿Querés continuar de todas formas?",
+            ):
+                return
+
             from cripto import generate_rsa_keypair
 
             try:

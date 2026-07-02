@@ -1,0 +1,6 @@
+# Cache de Python
+__pycache__/
+
+# Secretos y baúl generados por la app
+*.pem
+vault.bin

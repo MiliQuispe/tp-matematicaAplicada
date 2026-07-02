@@ -1,5 +1,4 @@
 import os
-from typing import Dict
 
 # IMPORTAMOS las funciones desde cripto.py
 from cripto import (
@@ -77,12 +76,3 @@ def delete_record(
 
     del records[name]
     encrypt_records_to_file(records, public_key_path, file_path)
-
-
-def list_records(file_path: str, private_key_path: str, passphrase: bytes = None) -> Dict[str, str]:
-    """Devuelve el diccionario completo de registros descifrados.
-
-    Se usa desde la CLI (main.py). La GUI llama directamente a
-    cripto.decrypt_records_from_file en lugar de esta función.
-    """
-    return decrypt_records_from_file(file_path, private_key_path, passphrase)
