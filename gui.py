@@ -520,11 +520,17 @@ class AdminContrasenasGUI:
         self.tabla.column("Servicio", width=260)
         self.tabla.column("Contraseña", width=260)
         self.tabla.pack(fill=tk.BOTH, expand=True)
+        # Doble clic en una fila para ver/copiar su contraseña
+        self.tabla.bind("<Double-1>", lambda e: self.ventana_ver())
 
-        # Barra inferior: Modificar y Eliminar
+        # Barra inferior: Ver, Modificar y Eliminar
         barra_inferior = tk.Frame(self.vista_baul, bg=COLOR_BG)
         barra_inferior.pack(fill=tk.X, padx=16, pady=16)
 
+        crear_boton(
+            barra_inferior, "Ver / Copiar", self.ventana_ver,
+            bg=COLOR_NEUTRAL, hover=COLOR_NEUTRAL_HOVER,
+        ).pack(side=tk.LEFT, padx=(0, 8))
         crear_boton(
             barra_inferior, "Modificar seleccionado", self.ventana_modificar,
             bg=COLOR_NEUTRAL, hover=COLOR_NEUTRAL_HOVER,
@@ -684,6 +690,40 @@ class AdminContrasenasGUI:
             win, "Guardar en el baul", registrar,
             bg=COLOR_ACCENT_DARK, hover=COLOR_ACCENT, fg="#04120E", width=26,
         ).pack(pady=6)
+
+    def ventana_ver(self):
+        """Muestra la contraseña real del registro seleccionado (que solo
+        vive en memoria) y permite copiarla al portapapeles."""
+        seleccion = self.tabla.selection()
+        if not seleccion:
+            messagebox.showwarning(
+                "Atención", "Selecciona una fila de la tabla para ver su contraseña."
+            )
+            return
+
+        item_data = self.tabla.item(seleccion[0], "values")
+        servicio_nombre = item_data[0]
+        password = self.registros_actuales.get(servicio_nombre, "")
+
+        win = estilizar_toplevel(tk.Toplevel(self.root), f"Ver · {servicio_nombre}", 420, 220)
+
+        tk.Label(win, text="Contraseña", font=FONT_SECTION, fg=COLOR_TEXT, bg=COLOR_BG).pack(pady=(20, 4))
+        tk.Label(win, text=servicio_nombre, font=FONT_MONO_BOLD, fg=COLOR_ACCENT, bg=COLOR_BG).pack(pady=(0, 14))
+
+        entry_pwd = crear_entry(win, width=30)
+        entry_pwd.insert(0, password)
+        entry_pwd.configure(state="readonly", readonlybackground=COLOR_CARD)
+        entry_pwd.pack(ipady=4, pady=5)
+
+        def copiar():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(password)
+            messagebox.showinfo("Copiado", "Contraseña copiada al portapapeles.")
+
+        crear_boton(
+            win, "Copiar al portapapeles", copiar,
+            bg=COLOR_ACCENT_DARK, hover=COLOR_ACCENT, fg="#04120E", width=26,
+        ).pack(pady=20)
 
     def ventana_modificar(self):
         seleccion = self.tabla.selection()
