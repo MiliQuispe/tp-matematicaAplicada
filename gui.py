@@ -94,6 +94,24 @@ def crear_entry(parent, textvariable=None, show=None, width=28, font=FONT_MONO):
     return entry
 
 
+def crear_check(parent, text, variable):
+    """Checkbutton acorde a la paleta oscura."""
+    return tk.Checkbutton(
+        parent,
+        text=text,
+        variable=variable,
+        bg=COLOR_BG,
+        fg=COLOR_TEXT,
+        selectcolor=COLOR_CARD,
+        activebackground=COLOR_BG,
+        activeforeground=COLOR_TEXT,
+        font=FONT_LABEL,
+        bd=0,
+        highlightthickness=0,
+        cursor="hand2",
+    )
+
+
 def crear_indicador_fortaleza(parent, sv_password):
     """Label que se actualiza solo, mostrando la fortaleza de la
     contraseña vinculada a `sv_password` (usa utils.password_strength)."""
@@ -572,7 +590,7 @@ class AdminContrasenasGUI:
             messagebox.showwarning("Aviso", "Debes acceder al baúl con la Contraseña Maestra primero.")
             return
 
-        win = estilizar_toplevel(tk.Toplevel(self.root), "Nuevo Registro", 420, 340)
+        win = estilizar_toplevel(tk.Toplevel(self.root), "Nuevo Registro", 440, 470)
 
         tk.Label(win, text="Nuevo registro", font=FONT_SECTION, fg=COLOR_TEXT, bg=COLOR_BG).pack(pady=(20, 14))
 
@@ -589,8 +607,50 @@ class AdminContrasenasGUI:
         # Label que indica el nivel de fortaleza de la contraseña (reutilizable)
         crear_indicador_fortaleza(win, sv_password).pack(anchor="w", padx=40, pady=(0, 10))
 
+        # Opciones del generador: largo y categorías de caracteres. Se pasan
+        # a utils.generate_password, que ya soporta elegir qué incluir.
+        usar_may = tk.BooleanVar(value=True)
+        usar_min = tk.BooleanVar(value=True)
+        usar_dig = tk.BooleanVar(value=True)
+        usar_esp = tk.BooleanVar(value=True)
+
+        opciones = tk.Frame(win, bg=COLOR_BG)
+        opciones.pack(anchor="w", padx=40, pady=(0, 4))
+        tk.Label(
+            opciones, text="Largo:", font=FONT_LABEL, fg=COLOR_TEXT_MUTED, bg=COLOR_BG
+        ).pack(side=tk.LEFT)
+        spin_largo = tk.Spinbox(
+            opciones, from_=8, to=32, width=4, font=FONT_LABEL,
+            bg=COLOR_CARD, fg=COLOR_TEXT, buttonbackground=COLOR_NEUTRAL,
+            relief="flat", highlightthickness=1, highlightbackground=COLOR_BORDER,
+            insertbackground=COLOR_ACCENT,
+        )
+        spin_largo.delete(0, tk.END)
+        spin_largo.insert(0, "16")
+        spin_largo.pack(side=tk.LEFT, padx=(6, 0))
+
+        cats = tk.Frame(win, bg=COLOR_BG)
+        cats.pack(anchor="w", padx=40, pady=(0, 10))
+        crear_check(cats, "A-Z", usar_may).pack(side=tk.LEFT)
+        crear_check(cats, "a-z", usar_min).pack(side=tk.LEFT)
+        crear_check(cats, "0-9", usar_dig).pack(side=tk.LEFT)
+        crear_check(cats, "!@#", usar_esp).pack(side=tk.LEFT)
+
         def auto_generar():
-            clave_segura = utils.generate_password(length=14)
+            if not (usar_may.get() or usar_min.get() or usar_dig.get() or usar_esp.get()):
+                messagebox.showerror("Error", "Elegí al menos un tipo de caracter.")
+                return
+            try:
+                clave_segura = utils.generate_password(
+                    length=int(spin_largo.get()),
+                    use_upper=usar_may.get(),
+                    use_lower=usar_min.get(),
+                    use_digits=usar_dig.get(),
+                    use_special=usar_esp.get(),
+                )
+            except ValueError as e:
+                messagebox.showerror("Error", str(e))
+                return
             entry_key.delete(0, tk.END)
             entry_key.insert(0, clave_segura)
 
