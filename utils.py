@@ -39,22 +39,24 @@ def password_strength(password: str) -> Dict[str, Any]:
             any(not c.isalnum() for c in password),
         ]
     )
-    # Puntuacion de 0 a 4
-    score = 0
-    if length >= 8:
-        score += 1
-    if length >= 12:
-        score += 1
-    if categories >= 3:
-        score += 1
-    if length >= 16 and categories == 4:
-        score += 1
+    # Puntuacion de 0 a 4, estrictamente progresiva: cada nivel exige lo del
+    # anterior, de modo que una contraseña corta nunca sube por diversidad.
+    if length < 8:
+        score = 0
+    elif length < 12:
+        score = 1
+    elif categories < 3:              # longitud >= 12
+        score = 2
+    elif length < 16 or categories < 4:  # >= 12 y >= 3 categorias
+        score = 3
+    else:                            # >= 16 y las 4 categorias
+        score = 4
     verdict = {
-        0: "Muy débil",
+        0: "Muy Débil",
         1: "Débil",
-        2: "Moderada",
-        3: "Fuerte",
-        4: "Muy fuerte",
+        2: "Regular",
+        3: "Buena",
+        4: "Excelente",
     }.get(score, "Indeterminado")
     return {
         "score": score,
