@@ -50,6 +50,9 @@ FONT_MONO = ("Consolas", 10)
 FONT_MONO_BOLD = ("Consolas", 10, "bold")
 FONT_BADGE = ("Consolas", 9, "bold")
 
+# La sesión se bloquea sola tras este tiempo sin actividad del usuario.
+TIMEOUT_INACTIVIDAD_MS = 120000  # 2 minutos
+
 
 def crear_boton(parent, text, command, bg=COLOR_NEUTRAL, hover=None, fg=COLOR_TEXT,
                  font=FONT_BODY_BOLD, width=None, padx=14, pady=8):
@@ -94,6 +97,25 @@ def crear_entry(parent, textvariable=None, show=None, width=28, font=FONT_MONO):
     return entry
 
 
+def agregar_ojito(parent, entry, bg=COLOR_PANEL):
+    """Botón de mostrar/ocultar (ojito) para un campo de contraseña.
+    El `entry` debe crearse con show='•'. Devuelve el botón."""
+    def alternar():
+        if entry.cget("show"):
+            entry.config(show="")       # muestra el texto
+            btn.config(text="Ocultar")
+        else:
+            entry.config(show="•")      # vuelve a ocultarlo
+            btn.config(text="Ver")
+    btn = tk.Button(
+        parent, text="Ver", command=alternar,
+        bg=bg, fg=COLOR_TEXT_MUTED, activebackground=bg,
+        activeforeground=COLOR_ACCENT, relief="flat", bd=0,
+        cursor="hand2", font=FONT_LABEL,
+    )
+    return btn
+
+
 def crear_check(parent, text, variable):
     """Checkbutton acorde a la paleta oscura."""
     return tk.Checkbutton(
@@ -123,15 +145,16 @@ NIVELES_FORTALEZA = {
 
 
 def crear_indicador_fortaleza(parent, sv_password):
-    """Barra visual de 4 segmentos + texto que reflejan la fortaleza de la
-    contraseña vinculada a `sv_password` (usa utils.password_strength)."""
+    """Barra visual de 5 segmentos + texto que reflejan la fortaleza de la
+    contraseña vinculada a `sv_password` (usa utils.password_strength).
+    Un segmento por cada nivel posible (puntaje 0 a 4)."""
     cont = tk.Frame(parent, bg=COLOR_BG)
 
     barra = tk.Frame(cont, bg=COLOR_BG)
     barra.pack(anchor="w")
     segmentos = []
-    for _ in range(4):
-        seg = tk.Frame(barra, width=46, height=6, bg=COLOR_BORDER)
+    for _ in range(5):
+        seg = tk.Frame(barra, width=36, height=6, bg=COLOR_BORDER)
         seg.pack(side=tk.LEFT, padx=(0, 4))
         seg.pack_propagate(False)
         segmentos.append(seg)
@@ -152,8 +175,8 @@ def crear_indicador_fortaleza(parent, sv_password):
 
         score = utils.password_strength(pwd)["score"]
         texto, color = NIVELES_FORTALEZA.get(score, ("-", COLOR_TEXT_DIM))
-        # Pintamos tantos segmentos como el puntaje (al menos 1 si hay texto).
-        activos = max(score, 1)
+        # Un segmento por nivel: puntaje 0 pinta 1 (rojo), puntaje 4 pinta 5.
+        activos = score + 1
         for i, seg in enumerate(segmentos):
             seg.config(bg=color if i < activos else COLOR_BORDER)
         lbl_fortaleza.config(text=f"Fortaleza: {texto}", fg=color)
@@ -204,6 +227,14 @@ class AdminContrasenasGUI:
         # es la única fuente de verdad para operaciones (ej. Modificar).
         self.registros_actuales = {}
 
+        # Id del borrado programado del portapapeles (auto-limpieza de
+        # seguridad). Guardamos el id para poder cancelarlo si se copia
+        # otra contraseña antes de que se cumplan los 20 segundos.
+        self._clipboard_job = None
+
+        # Id del auto-bloqueo por inactividad (ver TIMEOUT_INACTIVIDAD_MS).
+        self._lock_job = None
+
         self._configurar_estilos_ttk()
         self._crear_header()
 
@@ -223,6 +254,11 @@ class AdminContrasenasGUI:
         self.setup_vista_baul()
 
         self.mostrar_inicio()
+
+        # Cualquier tecla o clic cuenta como actividad y reinicia el
+        # temporizador de auto-bloqueo (solo mientras haya sesión activa).
+        self.root.bind_all("<Key>", self._registrar_actividad, add="+")
+        self.root.bind_all("<Button>", self._registrar_actividad, add="+")
 
     # ------------------------------------------------------------------
     # ESTILOS GLOBALES (ttk) Y HEADER
@@ -308,10 +344,45 @@ class AdminContrasenasGUI:
     def mostrar_inicio(self):
         self._actualizar_badge(activo=False)
         self.vista_inicio.tkraise()
+        # En Inicio no hay sesión: no tiene sentido el auto-bloqueo.
+        self._cancelar_temporizador_inactividad()
 
     def mostrar_baul(self):
         self._actualizar_badge(activo=True)
         self.vista_baul.tkraise()
+        # Al entrar al baúl arranca la cuenta regresiva de inactividad.
+        self._reiniciar_temporizador_inactividad()
+
+    # ------------------------------------------------------------------
+    # AUTO-BLOQUEO POR INACTIVIDAD
+    # ------------------------------------------------------------------
+    def _cancelar_temporizador_inactividad(self):
+        if self._lock_job is not None:
+            self.root.after_cancel(self._lock_job)
+            self._lock_job = None
+
+    def _reiniciar_temporizador_inactividad(self):
+        """(Re)programa el auto-bloqueo tras TIMEOUT_INACTIVIDAD_MS."""
+        self._cancelar_temporizador_inactividad()
+        self._lock_job = self.root.after(
+            TIMEOUT_INACTIVIDAD_MS, self._bloquear_por_inactividad
+        )
+
+    def _registrar_actividad(self, event=None):
+        # Cada tecla/clic reinicia la cuenta, pero solo con sesión abierta.
+        if self.master_password:
+            self._reiniciar_temporizador_inactividad()
+
+    def _bloquear_por_inactividad(self):
+        self._lock_job = None
+        if not self.master_password:
+            return
+        self.cerrar_sesion()  # limpia estado sensible y vuelve a Inicio
+        messagebox.showinfo(
+            "Sesión bloqueada",
+            "La sesión se bloqueó automáticamente por inactividad.\n"
+            "Ingresá tu contraseña maestra para volver a acceder.",
+        )
 
     # ------------------------------------------------------------------
     # VISTA 1: INICIO
@@ -360,9 +431,14 @@ class AdminContrasenasGUI:
             panel_existente, text="CONTRASEÑA MAESTRA", font=("Segoe UI", 8, "bold"),
             fg=COLOR_TEXT_MUTED, bg=COLOR_PANEL,
         ).pack(anchor="w", pady=(0, 4))
-        self.entry_master_inicio = crear_entry(panel_existente, show="•", width=34)
-        self.entry_master_inicio.pack(fill=tk.X, ipady=4, pady=(0, 14))
+        fila_master = tk.Frame(panel_existente, bg=COLOR_PANEL)
+        fila_master.pack(fill=tk.X, pady=(0, 14))
+        self.entry_master_inicio = crear_entry(fila_master, show="•", width=30)
+        self.entry_master_inicio.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)
         self.entry_master_inicio.bind("<Return>", lambda e: self.acceder_al_baul())
+        agregar_ojito(fila_master, self.entry_master_inicio, bg=COLOR_PANEL).pack(
+            side=tk.LEFT, padx=(6, 0)
+        )
 
         crear_boton(
             panel_existente, "Desencriptar y acceder", self.acceder_al_baul,
@@ -432,8 +508,11 @@ class AdminContrasenasGUI:
         ).pack(pady=(0, 14))
 
         sv_password_nueva = tk.StringVar()
-        entry_pass = crear_entry(win, textvariable=sv_password_nueva, show="•", width=30)
-        entry_pass.pack(ipady=4, pady=5)
+        fila_pass = tk.Frame(win, bg=COLOR_BG)
+        fila_pass.pack(pady=5)
+        entry_pass = crear_entry(fila_pass, textvariable=sv_password_nueva, show="•", width=26)
+        entry_pass.pack(side=tk.LEFT, ipady=4)
+        agregar_ojito(fila_pass, entry_pass, bg=COLOR_BG).pack(side=tk.LEFT, padx=(6, 0))
 
         crear_indicador_fortaleza(win, sv_password_nueva).pack(pady=(0, 4))
 
@@ -732,7 +811,7 @@ class AdminContrasenasGUI:
         servicio_nombre = item_data[0]
         password = self.registros_actuales.get(servicio_nombre, "")
 
-        win = estilizar_toplevel(tk.Toplevel(self.root), f"Ver · {servicio_nombre}", 420, 220)
+        win = estilizar_toplevel(tk.Toplevel(self.root), f"Ver · {servicio_nombre}", 420, 250)
 
         tk.Label(win, text="Contraseña", font=FONT_SECTION, fg=COLOR_TEXT, bg=COLOR_BG).pack(pady=(20, 4))
         tk.Label(win, text=servicio_nombre, font=FONT_MONO_BOLD, fg=COLOR_ACCENT, bg=COLOR_BG).pack(pady=(0, 14))
@@ -745,12 +824,46 @@ class AdminContrasenasGUI:
         def copiar():
             self.root.clipboard_clear()
             self.root.clipboard_append(password)
-            messagebox.showinfo("Copiado", "Contraseña copiada al portapapeles.")
+            # Auto-limpieza de seguridad: la contraseña se borra del
+            # portapapeles a los 20 segundos para no dejarla expuesta.
+            # Si había un borrado pendiente de una copia anterior, se
+            # cancela para no adelantar el borrado de esta.
+            if self._clipboard_job is not None:
+                self.root.after_cancel(self._clipboard_job)
+            self._clipboard_job = self.root.after(
+                20000, self._limpiar_portapapeles, password, lbl_estado
+            )
+            lbl_estado.config(
+                text="Copiado. Se borrará del portapapeles en 20 segundos."
+            )
 
         crear_boton(
             win, "Copiar al portapapeles", copiar,
             bg=COLOR_ACCENT_DARK, hover=COLOR_ACCENT, fg="#04120E", width=26,
-        ).pack(pady=20)
+        ).pack(pady=(20, 6))
+
+        # Mensaje de confirmación inline (en vez de un popup aparte)
+        lbl_estado = tk.Label(win, text="", font=FONT_LABEL, fg=COLOR_ACCENT, bg=COLOR_BG)
+        lbl_estado.pack(pady=(0, 10))
+
+    def _limpiar_portapapeles(self, valor_esperado, lbl_estado=None):
+        """Borra la contraseña del portapapeles, pero solo si sigue siendo
+        la que copiamos. Si el usuario copió otra cosa en el ínterin, no se
+        la pisamos. También limpia el mensaje inline de la ventana Ver."""
+        try:
+            actual = self.root.clipboard_get()
+        except tk.TclError:
+            actual = None  # portapapeles vacío o con contenido no textual
+        if actual == valor_esperado:
+            self.root.clipboard_clear()
+            self.root.clipboard_append("")  # deja el portapapeles vacío
+        # Limpia el mensaje inline, si la ventana Ver sigue abierta.
+        if lbl_estado is not None:
+            try:
+                lbl_estado.config(text="")
+            except tk.TclError:
+                pass  # la ventana ya se cerró
+        self._clipboard_job = None
 
     def ventana_modificar(self):
         seleccion = self.tabla.selection()
